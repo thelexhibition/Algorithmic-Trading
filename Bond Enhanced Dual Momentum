@@ -1,0 +1,178 @@
+#
+#   QuantConnect Basic Template:
+#    Fundamentals to using a QuantConnect algorithm.
+#
+#    You can view the QCAlgorithm base class on Github: 
+#    https://github.com/QuantConnect/Lean/tree/master/Algorithm
+#
+from datetime import date
+import numpy as np
+import pandas as pd
+
+class BasicTemplateAlgorithm(QCAlgorithm):
+
+    def Initialize(self):
+        # Set the cash we'd like to use for our backtest
+        # This is ignored in live trading 
+        self.SetCash(100000)
+        
+        # Start and end dates for the backtest.
+        # These are ignored in live trading.
+        self.SetStartDate(2004,1,1)
+        self.SetEndDate(2017,11,23)
+        
+        # Add assets you'd like to see
+        
+        self.safe = self.AddEquity("AGG", Resolution.Daily).Symbol
+        self.tlt = self.AddEquity("TLT", Resolution.Daily).Symbol
+        
+        # XIV can be interchanged with GLD
+        
+        self._symbols = []
+        
+        # Exotics
+        #self._symbols.append("EWW"), self._symbols.append("ECH"), self._symbols.append("EIDO"), self._symbols.append("THD"), self._symbols.append("EPOL")
+        #self._symbols.append("TUR"), self._symbols.append("EWO"), self._symbols.append("EPU"), self._symbols.append("EWN"), self._symbols.append("EPHE")
+        #self._symbols.append("ENZL"), self._symbols.append("EIS"), self._symbols.append("EWK"), self._symbols.append("EIRL"), self._symbols.append("EDEN")
+        #self._symbols.append("EFNL"), self._symbols.append("QAT"), self._symbols.append("UAE"), self._symbols.append("ENOR"), self._symbols.append("ICOL")
+        #self._symbols.append("KSA"), self._symbols.append("SPY")
+        
+        # Developed
+        #self._symbols.append("EWJ"), self._symbols.append("EWG"), self._symbols.append("EWC"), self._symbols.append("EWU"), self._symbols.append("EWH")
+        #self._symbols.append("EWA"), self._symbols.append("EWL"), self._symbols.append("EWW"), self._symbols.append("EWP"), self._symbols.append("EWI")
+        #self._symbols.append("EWQ"), self._symbols.append("EWS"), self._symbols.append("EWD"), self._symbols.append("EWM"), self._symbols.append("EWO")
+        #self._symbols.append("EWN"), self._symbols.append("EWK"), self._symbols.append("SPY")
+        
+        # R Bloggers Universe
+        #self._symbols.append("IJR"), self._symbols.append("EMB"), self._symbols.append("EEM"), self._symbols.append("LQD"), self._symbols.append("GNMA")
+        #self._symbols.append("SPY"), self._symbols.append("ICF"), self._symbols.append("EFA")
+        
+        # High NAV Universe
+        #self._symbols.append("SPY"), self._symbols.append("EFA"), self._symbols.append("GLD"), self._symbols.append("EEM")
+        
+        # Bond Universe  - Last Sharpe = 1.033
+        #self._symbols.append("IEF"), self._symbols.append("SHY"), self._symbols.append("LWC"), self._symbols.append("CIU"), self._symbols.append("CSJ"), self._symbols.append("MLN"), self._symbols.append("ITM"), self._symbols.append("SHM"), self._symbols.append("BLV"), self._symbols.append("GVI"), self._symbols.append("BSV")
+        #self._symbols.append("LWC"), self._symbols.append("CIU"), self._symbols.append("CSJ"), self._symbols.append("MLN"), self._symbols.append("ITM"), self._symbols.append("SHM"), self._symbols.append("IYR"), self._symbols.append("GLD")
+        
+        # Alternate Bond Universe - Last Sharpe = 1.19
+        #self._symbols.append("EMB"), self._symbols.append("TIP"), self._symbols.append("LQD"), self._symbols.append("CIU"), self._symbols.append("CSJ"), self._symbols.append("HYG")
+        self._symbols.append("EMB"), self._symbols.append("TIP"), self._symbols.append("LQD"), self._symbols.append("HYG")
+        
+        # Alternate Test - Last Sharpe = 0.86
+        #self._symbols.append("GLD"), self._symbols.append("SLV"), self._symbols.append("GSG"), self._symbols.append("HYG"), self._symbols.append("LQD")
+        #self._symbols.append("HYG"), self._symbols.append("LQD"), self._symbols.append("EMB"), self._symbols.append("IYR")
+        #self._symbols.append("GLD"), self._symbols.append("SLV"), self._symbols.append("IYR"), self._symbols.append("GSG")
+        
+        
+        for stock in self._symbols:
+            self.AddSecurity(SecurityType.Equity, stock, Resolution.Daily)
+            
+        self.currently_holding = []
+        
+                # schedule an event to fire at the beginning of the month, the symbol is optional
+        # if specified, it will fire the first trading day for that symbol of the month,
+        # if not specified it will fire on the first day of the month
+
+        self.Schedule.On(self.DateRules.MonthStart("AGG"), self.TimeRules.AfterMarketOpen("AGG", 10), Action(self.clear))
+        self.Schedule.On(self.DateRules.MonthStart("AGG"), self.TimeRules.AfterMarketOpen("AGG", 30), Action(self.rebalance))
+        self.Schedule.On(self.DateRules.MonthStart("AGG"), self.TimeRules.BeforeMarketClose("AGG", 0), Action(self.recordvars))
+        
+#    def OnData(self, slice):
+    def OnData(self, slice):
+        pass
+    
+    def rebalance(self):
+        
+        # Assign the day on the date
+
+        today = self.Time
+
+#        if not (today.month == 12 or today.month == 3 or today.month == 6 or today.month == 9):
+#            return
+        if not (today.month == 1 or today.month == 4 or today.month == 7 or today.month == 10):
+            return
+
+        mom_period = 22
+        
+        # Find historical price and calculate momentum
+
+        histmom = self.History(self._symbols, mom_period, Resolution.Daily)["close"].unstack(level=0)
+#        mom = (histmom[-1]/histmom[0]) - 1.0
+        mom = (histmom.iloc[-1]/histmom.iloc[0]) - 1.0
+        mom = mom.dropna()
+
+        top_assets = mom.sort_values().index[-4:]
+        top_assets_values = mom.sort_values()[-4:]
+
+#        self.Log("topassetsvalues is: {}".format(type(top_assets_values)))
+#        self.Log("topassets value: {}".format(top_assets))
+        
+        safe_percent = 0
+        tlt_percent = 0
+        
+        # Create list to manage Portfolio
+#        self.currently_holding = []
+        
+        # Rebalance Securities
+        for x in range(len(top_assets)):
+
+            if top_assets_values[x] > 0:   
+                self.SetHoldings(top_assets[x], 0.25)
+                self.currently_holding.append(top_assets[x])
+                    
+            else:
+                hist = self.History(self.safe, mom_period + 1, Resolution.Daily)["close"].unstack(level=0)
+                smom = (hist.iloc[-1]/hist.iloc[0]) - 1.0 
+                if smom.values[0] > 0:
+                    safe_percent += 0.25
+                    if self.safe not in self.currently_holding:
+                        self.currently_holding.append(self.safe)
+                else:
+                    tlt_percent +=0.25
+                    if self.tlt not in self.currently_holding:
+                        self.currently_holding.append(self.tlt)
+                        
+        top_up = 4 - len(top_assets)
+        if top_up > 0:
+            for x in range(top_up):
+                hist = self.History(self.safe, mom_period + 1, Resolution.Daily)["close"].unstack(level=0)
+                mom = (hist.iloc[-1]/hist.iloc[0]) - 1.0
+                if mom.values[0] > 0:
+                    safe_percent += 0.25 
+                    if self.safe not in self.currently_holding:
+                        self.currently_holding.append(self.safe)
+                else:
+                    tlt_percent += 0.25
+                    if self.tlt not in self.currently_holding:
+                        self.currently_holding.append(self.tlt)
+                        
+#        self.Log("AGG is: {}, TLT is : {}".format(safe_percent,tlt_percent))
+#        self.Log("currently_holding : {}".format(self.currently_holding))
+        
+        if safe_percent > 0:
+            self.SetHoldings(self.safe, safe_percent)
+        
+        if tlt_percent > 0:
+            self.SetHoldings(self.tlt, tlt_percent)
+
+ #       self.Log("Currently Bought : {}".format(str(self.currently_holding)))
+
+    def clear(self):
+        
+        today = self.Time
+
+#        if not (today.month == 12 or today.month == 3 or today.month == 6 or today.month == 9):
+#            return
+        if not (today.month == 1 or today.month == 4 or today.month == 7 or today.month == 10):
+            return
+
+#        print("Clear Start: " + str(self.currently_holding))
+        for s in self.currently_holding:
+            self.SetHoldings(s, 0)
+        self.currently_holding = []
+ #       print("Clear End: " + str(self.currently_holding))
+        
+    def recordvars(self):
+        #self.Log("Currently Bought : {}".format(str(self.currently_holding)))
+        invested = [ x.Symbol.Value for x in self.Portfolio.Values if x.Invested ]
+        self.Log("invested: " + str(invested))
